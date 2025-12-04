@@ -3,6 +3,17 @@
 ## Overview
 This service tracks vehicles and detects when they enter or exit defined geographic zones. It accepts real-time GPS location updates via an HTTP endpoint and provides vehicle status queries. The system is designed to be simple, efficient, and easily extensible.
 
+## Challenge Details
+This service implements a geofence event processing system for a taxi fleet. It receives real‑time GPS location updates via an HTTP endpoint, determines which predefined geographic zones the vehicle is in, detects entry/exit transitions, and provides a query endpoint to retrieve the current zone status of any vehicle.
+
+## Design Decisions
+| Decision | Reasoning |
+|---|---|
+| **FastAPI** | High‑performance async framework with automatic OpenAPI docs, ideal for HTTP APIs. |
+| **Shapely** | Robust geometry library for point‑in‑polygon checks, avoiding custom error‑prone math. |
+| **In‑memory dict store** | Simple, fast prototype without external dependencies; suitable for a 2‑hour challenge. |
+| **Hard‑coded zones** | Keeps the example self‑contained; can be externalised to DB/config in production. |
+
 ## File Structure
 
 ```
@@ -12,9 +23,7 @@ geofence_service/
 ├── models.py            # Pydantic data models for API validation
 ├── store.py             # In-memory vehicle state storage
 ├── test_simulation.py   # Script to verify service functionality
-├── requirements.txt     # Python dependencies
-├── README.md            # Project documentation
-└── .gitignore           # Git ignore rules
+└── requirements.txt     # Python dependencies
 ```
 
 ## Setup Instructions
@@ -50,7 +59,7 @@ geofence_service/
 -   **Method**: `GET`
 -   **Response**: Returns the current status, zone, and last update timestamp.
 
-## Architectural Decisions & Tradeoffs
+## Architectural Decisions
 
 ### 1. Framework: FastAPI
 *   **Decision**: Used FastAPI over Flask or Django.
@@ -72,32 +81,22 @@ geofence_service/
 *   **Reasoning**: Keeps the application self-contained and easy to run without external config files or DB migrations.
 *   **Tradeoff**: Changing zones requires a code deployment. In a real system, these would be loaded from a database or dynamic configuration service.
 
-## Assumptions
+## Tradeoffs
+- **In‑memory store**: Fast and simple but volatile; data loss on restart.
+- **Hard‑coded zones**: Easy to prototype, but requires code change for updates.
+- **FastAPI async**: Provides high performance, but adds async complexity for newcomers.
+- **Shapely dependency**: Powerful geometry handling, adds extra package weight.
+- **Single‑process deployment**: Simpler development, but not horizontally scalable.
 
 1.  **Coordinate System**: We assume a simple Cartesian plane for geometry calculations. For small zones (like a city center), this approximation is acceptable. For global scale or high precision, a library handling geodesic coordinates (like `pyproj`) would be necessary to account for Earth's curvature.
 2.  **Non-Overlapping Zones**: We assume zones do not overlap. If a point is in multiple zones, the behavior depends on the iteration order. A production system would need rules for handling overlaps (e.g., priority, nesting).
 3.  **Sequential Events**: We assume events arrive roughly in order. We do not handle out-of-order events (e.g., a timestamp from 5 minutes ago arriving after a current one).
 4.  **Single Instance**: The service runs as a single process. There is no distributed state handling.
 
-## Future Improvements
+## Future Improvements (if i have more time)
 
-### 1. Persistence Layer
-*   **Change**: Replace the in-memory `VehicleStore` with a persistent database.
-*   **Recommendation**: **PostgreSQL with PostGIS**. PostGIS is the industry standard for geospatial data, allowing for efficient spatial indexing and queries (e.g., "Find all vehicles in zone X"). Redis could be used for high-speed real-time state caching.
-
-### 2. Scalability & Concurrency
-*   **Change**: Decouple ingestion from processing.
-*   **Recommendation**: Introduce a message queue (e.g., **Kafka** or **RabbitMQ**). The API would publish events to a queue, and worker services would consume them to update state. This handles backpressure and allows scaling workers independently.
-*   **Locking**: If multiple updates for the same vehicle occur simultaneously, we need distributed locking (e.g., via Redis) to prevent race conditions.
-
-### 3. Dynamic Zone Management
-*   **Change**: Allow runtime updates to zones.
-*   **Recommendation**: Create CRUD APIs for zones and store them in the database. Cache them in memory for fast lookups, refreshing periodically or via pub/sub notifications.
-
-### 4. Spatial Indexing
-*   **Change**: Optimize zone lookups.
-*   **Recommendation**: If the number of zones grows to thousands, iterating through a list is inefficient ($O(N)$). Use a spatial index like an **R-tree** (available in `rtree` or PostGIS) to find candidate zones in $O(\log N)$ time.
-
-### 5. Observability
-*   **Change**: Production-grade monitoring.
-*   **Recommendation**: Add **Prometheus** metrics (events/sec, latency) and structured logging (JSON format) for better debugging and alerting.
+- **Persistence**: Switch the in‑memory store to a database (e.g., PostgreSQL + PostGIS).
+- **Scalability**: Add a message queue (Kafka/RabbitMQ) and worker processes.
+- **Dynamic Zones**: Provide CRUD APIs to manage zones at runtime.
+- **Spatial Indexing**: Use an R‑tree or PostGIS index for fast zone lookups.
+- **Observability**: Integrate Prometheus metrics and structured JSON logging.
